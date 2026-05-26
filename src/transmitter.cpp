@@ -14,8 +14,8 @@ typedef struct {
 PulseMessage pulseMessage;
 
 // More tolerant timing
-const unsigned long MIN_PULSE_INTERVAL_MS = 300;  // allows up to 200 BPM
-const unsigned long PEAK_TIMEOUT_MS = 120;
+const unsigned long MIN_PULSE_INTERVAL_MS = 650;  // allows up to 200 BPM
+const unsigned long PEAK_TIMEOUT_MS = 650;
 
 // Signal filtering
 float filteredValue = 0;
@@ -24,7 +24,7 @@ float baseline = 0;
 // Detection settings
 const float FILTER_ALPHA = 0.25;     // higher = more responsive
 const float BASELINE_ALPHA = 0.01;   // slow baseline tracking
-const int THRESHOLD_OFFSET = 180;    // pulse must rise this much above baseline
+const int THRESHOLD_OFFSET = 320;    // pulse must rise this much above baseline
 
 bool inPulse = false;
 unsigned long lastPulseTime = 0;
@@ -80,7 +80,6 @@ void setup() {
         return;
     }
 
-    // Initialize baseline
     int initial = analogRead(PULSE_PIN);
     filteredValue = initial;
     baseline = initial;
@@ -91,16 +90,13 @@ void setup() {
 void loop() {
     int rawValue = analogRead(PULSE_PIN);
 
-    // More responsive smoothing
     filteredValue = (1.0 - FILTER_ALPHA) * filteredValue + FILTER_ALPHA * rawValue;
 
-    // Slowly follow the resting signal level
     baseline = (1.0 - BASELINE_ALPHA) * baseline + BASELINE_ALPHA * filteredValue;
 
     float dynamicThreshold = baseline + THRESHOLD_OFFSET;
     unsigned long now = millis();
 
-    // Detect rising pulse above adaptive threshold
     if (!inPulse && filteredValue > dynamicThreshold) {
         if (now - lastPulseTime >= MIN_PULSE_INTERVAL_MS) {
             sendPulse();
@@ -120,7 +116,6 @@ void loop() {
         pulseStartTime = now;
     }
 
-    // Re-arm after signal drops near baseline OR after timeout
     if (inPulse) {
         if (filteredValue < baseline + 60 || now - pulseStartTime > PEAK_TIMEOUT_MS) {
             inPulse = false;
