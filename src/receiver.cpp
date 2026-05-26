@@ -2,49 +2,39 @@
 #include <WiFi.h>
 #include <esp_now.h>
 
+#define LED_PIN D0
+#define LED_ON_TIME_MS 80
+
 typedef struct {
-    int ecgValue;
-} ECGPacket;
+    bool pulse;
+} PulseMessage;
 
-ECGPacket receivedPacket;
+volatile bool pulseReceived = false;
 
-// LED pins on ESP32-WROOM-32
-int leds[] = {13, 12, 14, 27, 26};
-const int numLeds = 5;
+bool ledActive = false;
+unsigned long ledStartTime = 0;
 
-void showIntensity(int ecg) {
-    // Your AD8232 values were roughly around 1800–2100
-    int level = map(ecg, 1800, 2100, 0, numLeds);
-    level = constrain(level, 0, numLeds);
+void onDataRecv(const uint8_t *mac, const uint8_t *data, int len) {
+    if (len == sizeof(PulseMessage)) {
+        PulseMessage incomingMessage;
+        memcpy(&incomingMessage, data, sizeof(incomingMessage));
 
-    for (int i = 0; i < numLeds; i++) {
-        digitalWrite(leds[i], i < level ? HIGH : LOW);
+        if (incomingMessage.pulse) {
+            pulseReceived = true;
+        }
     }
-}
-
-// For your PlatformIO ESP32 Arduino core version, use this callback format
-void onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
-    memcpy(&receivedPacket, incomingData, sizeof(receivedPacket));
-
-    Serial.print("Received ECG: ");
-    Serial.println(receivedPacket.ecgValue);
-
-    showIntensity(receivedPacket.ecgValue);
 }
 
 void setup() {
     Serial.begin(115200);
     delay(1000);
 
-    for (int i = 0; i < numLeds; i++) {
-        pinMode(leds[i], OUTPUT);
-        digitalWrite(leds[i], LOW);
-    }
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
 
     WiFi.mode(WIFI_STA);
 
-    Serial.println();
-    Serial.print("Receiver MAC Address: ");
+    Serial.print("XIAO receiver MAC: ");
     Serial.println(WiFi.macAddress());
 
     if (esp_now_init() != ESP_OK) {
@@ -54,10 +44,22 @@ void setup() {
 
     esp_now_register_recv_cb(onDataRecv);
 
-    Serial.println("Receiver ready. Waiting for ECG data...");
+    Serial.println("XIAO receiver ready");
 }
 
 void loop() {
-    // Nothing needed here.
-    // Data is handled whenever a packet arrives.
+    if (pulseReceived) {
+        pulseReceived = false;
+
+        digitalWrite(LED_PIN, HIGH);
+        ledStartTime = millis();
+        ledActive = true;
+
+        Serial.println("Pulse received - LED ON");
+    }
+
+    if (ledActive && millis() - ledStartTime >= LED_ON_TIME_MS) {
+        digitalWrite(LED_PIN, LOW);
+        ledActive = false;
+    }
 }
